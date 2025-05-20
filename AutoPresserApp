@@ -1,0 +1,151 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import keyboard
+import threading
+import time
+import sys
+
+class AutoPresserApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Simple Auto Presser")
+        self.root.geometry("400x250")
+        self.root.resizable(False, False)
+        
+        self.is_running = False
+        self.press_key = "F1"
+        self.toggle_hotkey = "F2"
+        self.press_interval = 0.1  # seconds
+        
+        # Hotkey listener thread
+        self.listener_thread = None
+        self.stop_listener = False
+        
+        self.setup_ui()
+        self.start_hotkey_listener()
+        
+        # Handle window close
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+    
+    def setup_ui(self):
+        # Main frame
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        ttk.Label(main_frame, text="Auto Presser", font=('Helvetica', 14, 'bold')).pack(pady=5)
+        
+        # Press Key Selection
+        key_frame = ttk.Frame(main_frame)
+        key_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(key_frame, text="Press Key:").pack(side=tk.LEFT)
+        self.key_entry = ttk.Entry(key_frame, width=10)
+        self.key_entry.pack(side=tk.LEFT, padx=5)
+        self.key_entry.insert(0, self.press_key)
+        
+        # Hotkey Selection
+        hotkey_frame = ttk.Frame(main_frame)
+        hotkey_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(hotkey_frame, text="Toggle Hotkey:").pack(side=tk.LEFT)
+        self.hotkey_entry = ttk.Entry(hotkey_frame, width=10)
+        self.hotkey_entry.pack(side=tk.LEFT, padx=5)
+        self.hotkey_entry.insert(0, self.toggle_hotkey)
+        
+        # Interval Selection
+        interval_frame = ttk.Frame(main_frame)
+        interval_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(interval_frame, text="Press Interval (s):").pack(side=tk.LEFT)
+        self.interval_entry = ttk.Entry(interval_frame, width=10)
+        self.interval_entry.pack(side=tk.LEFT, padx=5)
+        self.interval_entry.insert(0, str(self.press_interval))
+        
+        # Save Settings Button
+        ttk.Button(main_frame, text="Save Settings", command=self.save_settings).pack(pady=10)
+        
+        # Status Frame
+        status_frame = ttk.Frame(main_frame)
+        status_frame.pack(fill=tk.X, pady=10)
+        
+        self.status_label = ttk.Label(status_frame, text="Status: OFF", foreground="red")
+        self.status_label.pack(side=tk.LEFT)
+        
+        # Manual Toggle Button
+        self.toggle_btn = ttk.Button(main_frame, text="Toggle ON", command=self.toggle_auto_press)
+        self.toggle_btn.pack(pady=5)
+        
+        # Instructions
+        ttk.Label(main_frame, text="Press the toggle hotkey to start/stop the auto presser", 
+                 font=('Helvetica', 8), foreground="gray").pack(side=tk.BOTTOM, pady=5)
+    
+    def save_settings(self):
+        try:
+            self.press_key = self.key_entry.get().strip()
+            self.toggle_hotkey = self.hotkey_entry.get().strip()
+            self.press_interval = float(self.interval_entry.get())
+            
+            # Restart the hotkey listener with new settings
+            self.stop_hotkey_listener()
+            self.start_hotkey_listener()
+            
+            messagebox.showinfo("Success", "Settings saved successfully!")
+        except ValueError:
+            messagebox.showerror("Error", "Please enter valid values for all fields")
+    
+    def start_hotkey_listener(self):
+        self.stop_listener = False
+        self.listener_thread = threading.Thread(target=self.hotkey_listener, daemon=True)
+        self.listener_thread.start()
+    
+    def stop_hotkey_listener(self):
+        self.stop_listener = True
+        if self.listener_thread and self.listener_thread.is_alive():
+            self.listener_thread.join(timeout=1)
+    
+    def hotkey_listener(self):
+        while not self.stop_listener:
+            if keyboard.is_pressed(self.toggle_hotkey):
+                self.toggle_auto_press()
+                # Debounce
+                time.sleep(0.5)
+            time.sleep(0.01)
+    
+    def toggle_auto_press(self):
+        self.is_running = not self.is_running
+        
+        if self.is_running:
+            self.status_label.config(text="Status: ON", foreground="green")
+            self.toggle_btn.config(text="Toggle OFF")
+            threading.Thread(target=self.auto_press_loop, daemon=True).start()
+        else:
+            self.status_label.config(text="Status: OFF", foreground="red")
+            self.toggle_btn.config(text="Toggle ON")
+    
+    def auto_press_loop(self):
+        while self.is_running:
+            try:
+                keyboard.press(self.press_key)
+                time.sleep(0.05)  # Short press duration
+                keyboard.release(self.press_key)
+                time.sleep(self.press_interval)
+            except Exception as e:
+                print(f"Error in auto press loop: {e}")
+                break
+    
+    def on_close(self):
+        self.stop_hotkey_listener()
+        self.is_running = False
+        self.root.destroy()
+
+if __name__ == "__main__":
+    try:
+        import keyboard
+    except ImportError:
+        print("The 'keyboard' module is required. Install it with: pip install keyboard")
+        sys.exit(1)
+    
+    root = tk.Tk()
+    app = AutoPresserApp(root)
+    root.mainloop()
